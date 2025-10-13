@@ -10,8 +10,189 @@ import {
 } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
+import {
+  User,
+  Settings,
+  LogOut,
+  MapPin,
+  Users,
+  Shield,
+  Building2,
+  ChevronDown,
+} from "lucide-react";
 
 import React, { useRef, useState } from "react";
+
+// User Profile Dropdown Component
+const UserProfileDropdown = () => {
+  const { data: session, status } = useSession();
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  if (status === "loading") {
+    return (
+      <div className="w-8 h-8 bg-gray-200 rounded-full animate-pulse"></div>
+    );
+  }
+
+  if (status === "unauthenticated") {
+    return (
+      <Link
+        href="/login"
+        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+      >
+        Login
+      </Link>
+    );
+  }
+
+  const getRoleIcon = (role: string) => {
+    switch (role) {
+      case "citizen":
+        return <User className="w-4 h-4" />;
+      case "field_staff":
+        return <Users className="w-4 h-4" />;
+      case "admin":
+        return <Shield className="w-4 h-4" />;
+      case "ngo":
+        return <Building2 className="w-4 h-4" />;
+      default:
+        return <User className="w-4 h-4" />;
+    }
+  };
+
+  const getRoleDashboard = (role: string) => {
+    switch (role) {
+      case "citizen":
+        return "/citizen";
+      case "field_staff":
+        return "/staff";
+      case "admin":
+        return "/admin";
+      case "ngo":
+        return "/ngo";
+      default:
+        return "/citizen";
+    }
+  };
+
+  const getRoleLabel = (role: string) => {
+    switch (role) {
+      case "citizen":
+        return "Citizen Dashboard";
+      case "field_staff":
+        return "Staff Dashboard";
+      case "admin":
+        return "Admin Dashboard";
+      case "ngo":
+        return "NGO Dashboard";
+      default:
+        return "Dashboard";
+    }
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+      >
+        <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+          {session?.user?.profileImage ? (
+            <img
+              src={session.user.profileImage}
+              alt={session.user.name || "User"}
+              width={32}
+              height={32}
+              className="w-8 h-8 rounded-full object-cover"
+            />
+          ) : (
+            session?.user?.name?.charAt(0).toUpperCase() || "U"
+          )}
+        </div>
+        <ChevronDown className="w-4 h-4 text-gray-600" />
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+          {/* User Info */}
+          <div className="px-4 py-3 border-b border-gray-100">
+            <p className="font-semibold text-gray-900">{session?.user?.name}</p>
+            <p className="text-sm text-gray-600">{session?.user?.email}</p>
+            <div className="flex items-center gap-2 mt-1">
+              {getRoleIcon(session?.user?.role || "")}
+              <span className="text-xs text-gray-500 capitalize">
+                {session?.user?.role?.replace("_", " ")}
+              </span>
+            </div>
+          </div>
+
+          {/* Navigation Links */}
+          <div className="py-2">
+            <Link
+              href="/map"
+              className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
+              onClick={() => setIsOpen(false)}
+            >
+              <MapPin className="w-4 h-4" />
+              <span>Map View</span>
+            </Link>
+
+            <Link
+              href={getRoleDashboard(session?.user?.role || "")}
+              className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
+              onClick={() => setIsOpen(false)}
+            >
+              {getRoleIcon(session?.user?.role || "")}
+              <span>{getRoleLabel(session?.user?.role || "")}</span>
+            </Link>
+
+            <Link
+              href="/profile"
+              className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
+              onClick={() => setIsOpen(false)}
+            >
+              <Settings className="w-4 h-4" />
+              <span>Profile Settings</span>
+            </Link>
+          </div>
+
+          {/* Logout */}
+          <div className="border-t border-gray-100 pt-2">
+            <button
+              onClick={() => {
+                setIsOpen(false);
+                signOut({ callbackUrl: "/login" });
+              }}
+              className="flex items-center gap-3 px-4 py-2 text-red-600 hover:bg-red-50 transition-colors w-full text-left"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Logout</span>
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface NavbarProps {
   children: React.ReactNode;
@@ -125,8 +306,7 @@ export const NavBody = ({ children, className, visible }: NavBodyProps) => {
   );
 };
 
-export const NavItems = ({ items, className, onItemClick }: NavItemsProps) => {
-  const [hovered, setHovered] = useState<number | null>(null);
+export const NavItems = ({ items, onItemClick }: NavItemsProps) => {
   const pathName = usePathname();
 
   return (
@@ -138,26 +318,15 @@ export const NavItems = ({ items, className, onItemClick }: NavItemsProps) => {
             (item.link !== "/" && pathName.startsWith(item.link));
           const isLogin =
             item.name.toLowerCase() === "login" || item.link === "/login";
-          return isLogin ? (
-            <Link
-              key={`link-${idx}`}
-              href={item.link}
-              onMouseEnter={() => setHovered(idx)}
-              onClick={onItemClick}
-              aria-label={item.name}
-              className={classNames(
-                "relative px-4 py-2 text-base mx-2 font-clash text-white bg-blue-500 hover:bg-blue-600 rounded-2xl",
-                {
-                  "horizontal-underline-active": active,
-                }
-              )}
-            >
-              <span className="tracking-wide">{item.name}</span>
-            </Link>
-          ) : (
+
+          // Replace login button with UserProfileDropdown
+          if (isLogin) {
+            return <UserProfileDropdown key={`profile-${idx}`} />;
+          }
+
+          return (
             <a
               key={`link-${idx}`}
-              onMouseEnter={() => setHovered(idx)}
               onClick={onItemClick}
               href={item.link}
               className={classNames(
@@ -227,7 +396,6 @@ export const MobileNavMenu = ({
   children,
   className,
   isOpen,
-  onClose,
 }: MobileNavMenuProps) => {
   return (
     <AnimatePresence>

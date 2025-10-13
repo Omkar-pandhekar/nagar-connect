@@ -18,6 +18,7 @@ const eslintConfig = [
       "out/**",
       "build/**",
       "next-env.d.ts",
+      "eslint-disable-next-line @typescript-eslint/no-unused-vars",
     ],
   },
 ];

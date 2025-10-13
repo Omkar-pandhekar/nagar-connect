@@ -3,10 +3,13 @@ import React, { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import FilterBar, { MapFilters } from "./FilterBar";
+import { useSession } from "next-auth/react";
+import LogoutButton from "@/components/LogoutButton";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN as string;
 
 const MapPage = () => {
+  const { data: session, status } = useSession();
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const [, setLoading] = useState(false);
