@@ -11,7 +11,6 @@ export async function POST(request: NextRequest) {
     const { email, password } = reqBody;
     console.log("Login attempt for:", email);
 
-    // Check if user exists
     const user = await User.findOne({ email });
     if (!user) {
       return NextResponse.json(
@@ -21,14 +20,12 @@ export async function POST(request: NextRequest) {
     }
     console.log("User found:", user.email);
 
-    // Check if password is correct
     const validPassword = await bcryptjs.compare(password, user.passwordHash);
     if (!validPassword) {
       return NextResponse.json({ error: "Invalid password" }, { status: 400 });
     }
     console.log("Password verified for:", user.email);
 
-    // Simple success response without JWT or cookies
     return NextResponse.json({
       message: "Login successful",
       success: true,

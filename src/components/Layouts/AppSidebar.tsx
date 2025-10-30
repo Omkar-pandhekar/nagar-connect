@@ -36,36 +36,36 @@ const AppSidebar = ({ userType }: AppSidebarProps) => {
   const navLinks =
     userType === "citizen"
       ? [
-          { icon: Building, label: "Overview", href: "/doctor/overview" },
+          { icon: Building, label: "Overview", href: "/citizen/overview" },
           {
             icon: FileText,
-            label: "Appointments",
-            href: "/doctor/appointments",
+            label: "Issues",
+            href: "/citizen/issues",
           },
           {
             icon: Pill,
-            label: "Prescriptions",
-            href: "/doctor/prescriptions",
+            label: "Solutions",
+            href: "/citizen/solutions",
           },
           {
             icon: FolderUp,
-            label: "Upload Files",
-            href: "/doctor/upload-files",
+            label: "Post Issue",
+            href: "/citizen/post-issue",
           },
 
-          { icon: Files, label: "Files", href: "/doctor/files" },
+          { icon: Files, label: "Complaints", href: "/citizen/complaints" },
 
-          { icon: Settings, label: "Settings", href: "/doctor/settings" },
+          { icon: Settings, label: "Settings", href: "/citizen/settings" },
         ]
-      : userType === "ngo"
+      : userType === "field_staff"
       ? [
-          { icon: Heart, label: "Overview", href: "/hospital/overview" },
+          { icon: Heart, label: "Overview", href: "/staff/overview" },
           {
             icon: FileText,
-            label: "Doctors",
-            href: "/hospital/doctors",
+            label: "Issues",
+            href: "/staff/issues",
           },
-          { icon: Home, label: "Appointments", href: "/hospital/appointments" },
+          { icon: Home, label: "Work", href: "/staff/work" },
 
           { icon: Settings, label: "Settings", href: "/hospital/settings" },
         ]
@@ -112,7 +112,8 @@ const AppSidebar = ({ userType }: AppSidebarProps) => {
   return (
     <Sidebar
       collapsible="icon"
-      className="fixed left-0 bg-zinc-100 dark:bg-zinc-900  shadow-lg"
+      variant="floating"
+      className="fixed left-0 bg-zinc-100 dark:bg-zinc-900"
       style={{
         top: `${NAVBAR_HEIGHT}px`,
         height: `calc(100vh - ${NAVBAR_HEIGHT}px)`,
