@@ -31,7 +31,7 @@ export default function RegisterPage() {
     phn: "",
     password: "",
     confirmPassword: "",
-    role: "citizen",
+    role: "",
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -220,6 +220,10 @@ export default function RegisterPage() {
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="ngo" id="ngo" />
                 <Label htmlFor="ngo">NGO</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="department" id="department" />
+                <Label htmlFor="department">Department</Label>
               </div>
             </RadioGroup>
           </div>

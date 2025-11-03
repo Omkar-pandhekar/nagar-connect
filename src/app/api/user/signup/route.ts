@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
       citizen: "citizen",
       worker: "field_staff",
       ngo: "ngo",
+      department: "department",
     };
 
     const userType = userTypeMap[role] || "citizen";

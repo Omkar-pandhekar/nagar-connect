@@ -1,3 +1,3 @@
 interface AppSidebarProps {
-  userType: "citizen" | "field_staff" | "ngo";
+  userType: "citizen" | "field_staff" | "ngo" | "department";
 }

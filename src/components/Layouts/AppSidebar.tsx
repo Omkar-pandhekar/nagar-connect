@@ -67,7 +67,20 @@ const AppSidebar = ({ userType }: AppSidebarProps) => {
           },
           { icon: Home, label: "Work", href: "/staff/work" },
 
-          { icon: Settings, label: "Settings", href: "/hospital/settings" },
+          { icon: Settings, label: "Settings", href: "/staff/settings" },
+        ]
+      : userType === "department"
+      ? [
+          { icon: Heart, label: "Overview", href: "/department/overview" },
+          {
+            icon: FileText,
+            label: "Issues",
+            href: "/department/issues",
+          },
+          { icon: Home, label: "Workers", href: "/department/workers" },
+          { icon: Home, label: "Requests", href: "/department/requests  " },
+
+          { icon: Settings, label: "Settings", href: "/staff/settings" },
         ]
       : [
           { icon: Home, label: "Overview", href: "/user/overview" },
@@ -135,6 +148,8 @@ const AppSidebar = ({ userType }: AppSidebarProps) => {
                       ? "Citizen View"
                       : userType === "ngo"
                       ? "NGO View"
+                      : userType === "department"
+                      ? "Department View"
                       : "User View"}
                   </h1>
                   <button

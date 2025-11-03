@@ -85,6 +85,8 @@ const UserProfileDropdown = () => {
         return "/citizen";
       case "field_staff":
         return "/staff";
+      case "department":
+        return "/department";
       case "admin":
         return "/admin";
       case "ngo":
@@ -100,6 +102,8 @@ const UserProfileDropdown = () => {
         return "Citizen Dashboard";
       case "field_staff":
         return "Staff Dashboard";
+      case "department":
+        return "Department Dashboard";
       case "admin":
         return "Admin Dashboard";
       case "ngo":

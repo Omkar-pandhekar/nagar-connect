@@ -1,6 +1,11 @@
 import mongoose, { models, model, Schema } from "mongoose";
 
-export type UserType = "citizen" | "admin" | "field_staff" | "ngo";
+export type UserType =
+  | "citizen"
+  | "admin"
+  | "field_staff"
+  | "ngo"
+  | "department";
 
 export interface IUser {
   _id?: mongoose.Types.ObjectId;
@@ -38,7 +43,7 @@ const userSchema = new Schema<IUser>(
     },
     userType: {
       type: String,
-      enum: ["citizen", "admin", "field_staff", "ngo"],
+      enum: ["citizen", "admin", "field_staff", "ngo", "department"],
       required: [true, "Please provide a valid user type!"],
     },
     phoneNumber: {

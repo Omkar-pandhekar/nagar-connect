@@ -67,7 +67,7 @@ export default function LoginPage() {
       initial={{ opacity: 0, y: 100 }}
       animate={{ opacity: 1, y: 1 }}
       transition={{
-        duration: 5,
+        duration: 1,
       }}
     >
       <div className="flex items-center justify-center mx-auto my-12 min-h-screen">
