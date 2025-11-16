@@ -52,26 +52,66 @@ export async function PUT(request: NextRequest) {
     const { employeeId, department, role, address, location, seekApproval } =
       reqBody;
 
-    // Find the field staff profile
-    const fieldStaffProfile = await FieldStaffProfile.findOne({
+    const validRoles = [
+      "Team Member",
+      "Supervisor",
+      "Manager",
+      "Department Head",
+    ];
+
+    const convertDepartment = (deptId: string) => {
+      if (!mongoose.Types.ObjectId.isValid(deptId)) {
+        throw new Error("INVALID_DEPARTMENT");
+      }
+      return new mongoose.Types.ObjectId(deptId);
+    };
+
+    const normalizeAddress = () => {
+      if (address === undefined) return undefined;
+      const normalized: Record<string, string | undefined> = {};
+      if (address.street !== undefined) {
+        normalized.street = address.street.trim() || undefined;
+      }
+      if (address.city !== undefined) {
+        normalized.city = address.city.trim() || undefined;
+      }
+      if (address.pincode !== undefined) {
+        if (address.pincode && !/^\d{6}$/.test(address.pincode.trim())) {
+          throw new Error("INVALID_PINCODE");
+        }
+        normalized.pincode = address.pincode.trim() || undefined;
+      }
+      return normalized;
+    };
+
+    const normalizeLocation = () => {
+      if (location === undefined || !location.coordinates) return undefined;
+      const [longitude, latitude] = location.coordinates;
+      if (
+        typeof longitude !== "number" ||
+        typeof latitude !== "number" ||
+        isNaN(longitude) ||
+        isNaN(latitude)
+      ) {
+        throw new Error("INVALID_LOCATION");
+      }
+      return {
+        type: "Point" as const,
+        coordinates: [longitude, latitude] as [number, number],
+      };
+    };
+
+    const profile = await FieldStaffProfile.findOne({
       userId: new mongoose.Types.ObjectId(userId),
     });
 
-    if (!fieldStaffProfile) {
-      return NextResponse.json(
-        { error: "Field staff profile not found" },
-        { status: 404 }
-      );
-    }
-
-    // Prepare update object
+    // Prepare shared update data
     const updateData: any = {};
 
-    // Update employeeId if provided
     if (employeeId !== undefined && employeeId.trim() !== "") {
-      // Check if employeeId is already taken by another user
+      const normalizedEmployeeId = employeeId.trim();
       const existingProfile = await FieldStaffProfile.findOne({
-        employeeId: employeeId.trim(),
+        employeeId: normalizedEmployeeId,
         userId: { $ne: new mongoose.Types.ObjectId(userId) },
       });
       if (existingProfile) {
@@ -80,28 +120,21 @@ export async function PUT(request: NextRequest) {
           { status: 400 }
         );
       }
-      updateData.employeeId = employeeId.trim();
+      updateData.employeeId = normalizedEmployeeId;
     }
 
-    // Update department if provided
     if (department !== undefined && department.trim() !== "") {
-      if (!mongoose.Types.ObjectId.isValid(department)) {
+      try {
+        updateData.department = convertDepartment(department.trim());
+      } catch {
         return NextResponse.json(
           { error: "Invalid department ID" },
           { status: 400 }
         );
       }
-      updateData.department = new mongoose.Types.ObjectId(department);
     }
 
-    // Update role if provided
     if (role !== undefined && role.trim() !== "") {
-      const validRoles = [
-        "Team Member",
-        "Supervisor",
-        "Manager",
-        "Department Head",
-      ];
       if (!validRoles.includes(role)) {
         return NextResponse.json(
           { error: `Role must be one of: ${validRoles.join(", ")}` },
@@ -111,84 +144,122 @@ export async function PUT(request: NextRequest) {
       updateData.role = role;
     }
 
-    // Update address if provided
-    if (address !== undefined) {
-      updateData.address = {};
-      if (address.street !== undefined) {
-        updateData.address.street = address.street.trim() || undefined;
+    try {
+      const normalizedAddress = normalizeAddress();
+      if (normalizedAddress) {
+        updateData.address = normalizedAddress;
       }
-      if (address.city !== undefined) {
-        updateData.address.city = address.city.trim() || undefined;
+      const normalizedLocation = normalizeLocation();
+      if (normalizedLocation) {
+        updateData.location = normalizedLocation;
       }
-      if (address.pincode !== undefined) {
-        if (address.pincode && !/^\d{6}$/.test(address.pincode.trim())) {
+    } catch (err) {
+      if (err instanceof Error) {
+        if (err.message === "INVALID_PINCODE") {
           return NextResponse.json(
             { error: "Pincode must be a valid 6-digit number" },
             { status: 400 }
           );
         }
-        updateData.address.pincode = address.pincode.trim() || undefined;
+        if (err.message === "INVALID_LOCATION") {
+          return NextResponse.json(
+            { error: "Invalid location coordinates" },
+            { status: 400 }
+          );
+        }
       }
+      throw err;
     }
 
-    // Update location if provided
-    if (location !== undefined && location.coordinates) {
-      const [longitude, latitude] = location.coordinates;
-      if (
-        typeof longitude !== "number" ||
-        typeof latitude !== "number" ||
-        isNaN(longitude) ||
-        isNaN(latitude)
-      ) {
+    if (profile) {
+      if (seekApproval === true) {
+        if (profile.approvalStatus === "approved") {
+          return NextResponse.json(
+            {
+              error:
+                "Cannot seek approval again. Your profile is already approved.",
+            },
+            { status: 400 }
+          );
+        }
+        updateData.approvalStatus = "pending";
+      }
+
+      const updatedProfile = await FieldStaffProfile.findByIdAndUpdate(
+        profile._id,
+        { $set: updateData },
+        { new: true, runValidators: true }
+      )
+        .populate("department", "name shortCode")
+        .lean();
+
+      if (!updatedProfile) {
         return NextResponse.json(
-          { error: "Invalid location coordinates" },
-          { status: 400 }
+          { error: "Failed to update field staff profile" },
+          { status: 500 }
         );
       }
-      updateData.location = {
-        type: "Point",
-        coordinates: [longitude, latitude],
-      };
+
+      return NextResponse.json({
+        message: seekApproval
+          ? "Profile updated and approval requested successfully"
+          : "Field staff profile updated successfully",
+        success: true,
+        data: updatedProfile,
+      });
     }
 
-    // Handle approval status change
-    if (seekApproval === true) {
-      // When seeking approval, set status to pending
-      // Only allow this if current status is not already approved
-      if (fieldStaffProfile.approvalStatus === "approved") {
-        return NextResponse.json(
-          {
-            error:
-              "Cannot seek approval again. Your profile is already approved.",
-          },
-          { status: 400 }
-        );
-      }
-      updateData.approvalStatus = "pending";
+    // Creating a new profile because one doesn't exist
+    if (!department || department.trim() === "") {
+      return NextResponse.json(
+        { error: "Department is required to create a profile" },
+        { status: 400 }
+      );
     }
 
-    // Update field staff profile
-    const updatedProfile = await FieldStaffProfile.findByIdAndUpdate(
-      fieldStaffProfile._id,
-      { $set: updateData },
-      { new: true, runValidators: true }
+    if (!mongoose.Types.ObjectId.isValid(department.trim())) {
+      return NextResponse.json(
+        { error: "Invalid department ID" },
+        { status: 400 }
+      );
+    }
+
+    if (!role || role.trim() === "") {
+      return NextResponse.json(
+        { error: "Role is required to create a profile" },
+        { status: 400 }
+      );
+    }
+
+    if (!validRoles.includes(role)) {
+      return NextResponse.json(
+        { error: `Role must be one of: ${validRoles.join(", ")}` },
+        { status: 400 }
+      );
+    }
+
+    const newProfileData: any = {
+      userId: new mongoose.Types.ObjectId(userId),
+      department: new mongoose.Types.ObjectId(department.trim()),
+      role,
+      approvalStatus: seekApproval === true ? "pending" : "pending",
+    };
+
+    Object.assign(newProfileData, updateData);
+
+    const createdProfile = await FieldStaffProfile.create(newProfileData);
+    const populatedProfile = await FieldStaffProfile.findById(
+      createdProfile._id
     )
       .populate("department", "name shortCode")
       .lean();
 
-    if (!updatedProfile) {
-      return NextResponse.json(
-        { error: "Failed to update field staff profile" },
-        { status: 500 }
-      );
-    }
-
     return NextResponse.json({
       message: seekApproval
-        ? "Profile updated and approval requested successfully"
-        : "Field staff profile updated successfully",
+        ? "Profile created and approval requested successfully"
+        : "Field staff profile created successfully",
       success: true,
-      data: updatedProfile,
+      data: populatedProfile,
     });
   } catch (error) {
     console.error("Field Staff Update API error:", error);

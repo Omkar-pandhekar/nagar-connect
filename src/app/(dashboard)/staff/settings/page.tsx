@@ -23,6 +23,7 @@ import {
 import { useSession } from "next-auth/react";
 import { FileUpload } from "@/components/ui/file-upload";
 import { ROLES } from "@/components/common/constant";
+import { LocateFixed } from "lucide-react";
 
 interface UserData {
   _id?: string;
@@ -71,6 +72,8 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [seekingApproval, setSeekingApproval] = useState(false);
+  const [isDetecting, setIsDetecting] = useState(false);
+  const [locationError, setLocationError] = useState("");
   const [message, setMessage] = useState<{
     type: "success" | "error";
     text: string;
@@ -102,7 +105,7 @@ export default function SettingsPage() {
         const [response, response2, response3] = await Promise.all([
           fetch("/api/user/get-info"),
           fetch("/api/field_staff/get-info"),
-          fetch("/api/departments"),
+          fetch("/api/departments/get-all-departments"),
         ]);
 
         const result = await response.json();
@@ -170,6 +173,88 @@ export default function SettingsPage() {
     fetchUserData();
   }, []);
 
+  const handleDetectLocation = () => {
+    setIsDetecting(true);
+    setLocationError("");
+
+    if (!navigator.geolocation) {
+      setLocationError("Geolocation is not supported by your browser.");
+      setIsDetecting(false);
+      return;
+    }
+
+    const geoOptions = {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0,
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+
+        try {
+          const accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
+          const apiUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${accessToken}`;
+
+          console.log("Requesting URL:", apiUrl);
+
+          const response = await fetch(apiUrl);
+          const data = await response.json();
+
+          console.log("Mapbox API Response:", data);
+
+          if (data.features && data.features.length > 0) {
+            const feature = data.features[0];
+            const address = feature.place_name;
+
+            // Extract city and pincode from context
+            let city = "";
+            let pincode = "";
+
+            if (feature.context) {
+              const placeContext = feature.context.find((c: any) =>
+                c.id.startsWith("place")
+              );
+              const postcodeContext = feature.context.find((c: any) =>
+                c.id.startsWith("postcode")
+              );
+
+              city = placeContext ? placeContext.text : "";
+              pincode = postcodeContext ? postcodeContext.text : "";
+            }
+
+            // Update form with detected location
+            setFormData((prev) => ({
+              ...prev,
+              street: address,
+              city: city || prev.city,
+              pincode: pincode || prev.pincode,
+              latitude: latitude.toString(),
+              longitude: longitude.toString(),
+            }));
+
+            setMessage({
+              type: "success",
+              text: "Location detected successfully!",
+            });
+          } else {
+            throw new Error("No address found for your location via Mapbox.");
+          }
+        } catch (err) {
+          setLocationError(err.message);
+        } finally {
+          setIsDetecting(false);
+        }
+      },
+      (err) => {
+        setLocationError(`Geolocation Error: ${err.message}`);
+        setIsDetecting(false);
+      },
+      geoOptions
+    );
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -200,21 +285,6 @@ export default function SettingsPage() {
 
     if (formData.pincode && !/^\d{6}$/.test(formData.pincode.trim())) {
       newErrors.pincode = "Pincode must be a valid 6-digit number";
-    }
-
-    if (
-      (formData.latitude || formData.longitude) &&
-      (!formData.latitude || !formData.longitude)
-    ) {
-      newErrors.location = "Both latitude and longitude are required";
-    }
-
-    if (formData.latitude && isNaN(parseFloat(formData.latitude))) {
-      newErrors.latitude = "Latitude must be a valid number";
-    }
-
-    if (formData.longitude && isNaN(parseFloat(formData.longitude))) {
-      newErrors.longitude = "Longitude must be a valid number";
     }
 
     if (formData.password || formData.confirmPassword) {
@@ -554,12 +624,30 @@ export default function SettingsPage() {
                 </Field>
               )}
 
-              {/* Address Section */}
+              {/* Address Section with Auto-detect */}
               <div className="pt-4 border-t">
-                <h3 className="text-lg font-medium mb-4">Address</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium">Address</h3>
+                  <Button
+                    type="button"
+                    onClick={handleDetectLocation}
+                    disabled={isDetecting}
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-2"
+                  >
+                    <LocateFixed className="h-4 w-4" />
+                    {isDetecting ? "Detecting..." : "Auto-detect Location"}
+                  </Button>
+                </div>
+                {locationError && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                    <p className="text-sm text-red-600">{locationError}</p>
+                  </div>
+                )}
                 <div className="space-y-4">
                   <Field>
-                    <FieldLabel htmlFor="street">Street</FieldLabel>
+                    <FieldLabel htmlFor="street">Street Address</FieldLabel>
                     <FieldContent>
                       <Input
                         id="street"
@@ -568,6 +656,7 @@ export default function SettingsPage() {
                         value={formData.street}
                         onChange={handleInputChange}
                         placeholder="Enter street address"
+                        disabled={isDetecting}
                       />
                     </FieldContent>
                   </Field>
@@ -582,6 +671,7 @@ export default function SettingsPage() {
                           value={formData.city}
                           onChange={handleInputChange}
                           placeholder="Enter city"
+                          disabled={isDetecting}
                         />
                       </FieldContent>
                     </Field>
@@ -597,6 +687,7 @@ export default function SettingsPage() {
                           placeholder="Enter 6-digit pincode"
                           maxLength={6}
                           aria-invalid={!!errors.pincode}
+                          disabled={isDetecting}
                         />
                         {errors.pincode && (
                           <FieldError>{errors.pincode}</FieldError>
@@ -604,56 +695,15 @@ export default function SettingsPage() {
                       </FieldContent>
                     </Field>
                   </div>
+                  {formData.latitude && formData.longitude && (
+                    <div className="text-xs text-gray-500 mt-2">
+                      Coordinates: {parseFloat(formData.latitude).toFixed(6)},{" "}
+                      {parseFloat(formData.longitude).toFixed(6)}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Location Section */}
-              <div className="pt-4 border-t">
-                <h3 className="text-lg font-medium mb-4">
-                  Location (Optional)
-                </h3>
-                <div className="flex items-center gap-4">
-                  <Field>
-                    <FieldLabel htmlFor="latitude">Latitude</FieldLabel>
-                    <FieldContent>
-                      <Input
-                        id="latitude"
-                        name="latitude"
-                        type="number"
-                        step="any"
-                        value={formData.latitude}
-                        onChange={handleInputChange}
-                        placeholder="Enter latitude"
-                        aria-invalid={!!errors.latitude}
-                      />
-                      {errors.latitude && (
-                        <FieldError>{errors.latitude}</FieldError>
-                      )}
-                    </FieldContent>
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="longitude">Longitude</FieldLabel>
-                    <FieldContent>
-                      <Input
-                        id="longitude"
-                        name="longitude"
-                        type="number"
-                        step="any"
-                        value={formData.longitude}
-                        onChange={handleInputChange}
-                        placeholder="Enter longitude"
-                        aria-invalid={!!errors.longitude}
-                      />
-                      {errors.longitude && (
-                        <FieldError>{errors.longitude}</FieldError>
-                      )}
-                    </FieldContent>
-                  </Field>
-                </div>
-                {errors.location && (
-                  <FieldError className="mt-2">{errors.location}</FieldError>
-                )}
-              </div>
               {/* Profile Picture */}
               <Field>
                 <FieldLabel htmlFor="profilePicture">

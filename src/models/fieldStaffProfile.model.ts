@@ -2,10 +2,10 @@ import mongoose, { models, model, Schema } from "mongoose";
 
 export interface IFieldStaffProfile {
   _id?: mongoose.Types.ObjectId;
-  userId: mongoose.Types.ObjectId; 
-  employeeId: string; 
-  department: mongoose.Types.ObjectId; 
-  role: "Team Member" | "Supervisor" | "Manager" | "Department Head"; 
+  userId: mongoose.Types.ObjectId;
+  employeeId?: string | null;
+  department: mongoose.Types.ObjectId;
+  role: "Team Member" | "Supervisor" | "Manager" | "Department Head";
   address?: {
     street?: string;
     city?: string;
@@ -15,7 +15,7 @@ export interface IFieldStaffProfile {
     type: "Point";
     coordinates: [number, number];
   };
-  approvalStatus: "pending" | "approved" | "rejected"; 
+  approvalStatus: "pending" | "approved" | "rejected";
 
   createdAt?: Date;
   updatedAt?: Date;
@@ -31,8 +31,10 @@ const fieldStaffProfileSchema = new Schema<IFieldStaffProfile>(
     },
     employeeId: {
       type: String,
-      required: [true, "Employee ID is required for municipal staff"],
       unique: true,
+      sparse: true,
+      default: null,
+      required: false,
     },
     department: {
       type: Schema.Types.ObjectId,
@@ -56,7 +58,7 @@ const fieldStaffProfileSchema = new Schema<IFieldStaffProfile>(
         default: "Point",
       },
       coordinates: {
-        type: [Number], 
+        type: [Number],
         index: "2dsphere",
         sparse: true,
       },
@@ -71,8 +73,13 @@ const fieldStaffProfileSchema = new Schema<IFieldStaffProfile>(
   { timestamps: true }
 );
 
-const FieldStaffProfile =
-  models?.field_staff_profiles ||
-  model<IFieldStaffProfile>("field_staff_profiles", fieldStaffProfileSchema);
+if (models?.field_staff_profiles) {
+  delete mongoose.models.field_staff_profiles;
+}
+
+const FieldStaffProfile = model<IFieldStaffProfile>(
+  "field_staff_profiles",
+  fieldStaffProfileSchema
+);
 
 export default FieldStaffProfile;

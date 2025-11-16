@@ -53,8 +53,6 @@ const AppSidebar = ({ userType }: AppSidebarProps) => {
             href: "/citizen/post-issue",
           },
 
-          { icon: Files, label: "Complaints", href: "/citizen/complaints" },
-
           { icon: Settings, label: "Settings", href: "/citizen/settings" },
         ]
       : userType === "field_staff"
@@ -80,7 +78,7 @@ const AppSidebar = ({ userType }: AppSidebarProps) => {
           { icon: Home, label: "Workers", href: "/department/workers" },
           { icon: Home, label: "Requests", href: "/department/requests  " },
 
-          { icon: Settings, label: "Settings", href: "/staff/settings" },
+          { icon: Settings, label: "Settings", href: "/department/settings" },
         ]
       : [
           { icon: Home, label: "Overview", href: "/user/overview" },

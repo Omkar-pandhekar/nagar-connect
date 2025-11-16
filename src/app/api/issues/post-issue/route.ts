@@ -3,6 +3,52 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/utils/authOptions";
 import { ConnectDB } from "@/db/dbConfig";
 import Issue from "@/models/issue.model";
+import Department from "@/models/department.model";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+// Initialize Gemini AI
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+
+async function getDepartmentFromAI(
+  title: string,
+  description: string,
+  category: string,
+  availableDepartments: Array<{ name: string; shortCode: string }>
+): Promise<string | null> {
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+    const prompt = `You are an intelligent issue routing system for a civic complaint platform. 
+Your task is to analyze the issue and determine which department should handle it.
+
+Issue Details:
+- Title: ${title}
+- Description: ${description}
+- Category: ${category}
+
+Available Departments:
+${availableDepartments.map((d) => `- ${d.name} (${d.shortCode})`).join("\n")}
+
+Based on the issue details, determine the MOST APPROPRIATE department to handle this complaint.
+Respond with ONLY the department shortCode (e.g., "ELEC", "PWD", "SWM").
+If no department is a good match, respond with "GENERAL".
+
+Response (shortCode only):`;
+
+    const result = await model.generateContent(prompt);
+    const response = result.response.text().trim().toUpperCase();
+
+    // Validate that the response matches one of the available departments
+    const matchedDept = availableDepartments.find(
+      (d) => d.shortCode.toUpperCase() === response
+    );
+
+    return matchedDept ? matchedDept.shortCode : null;
+  } catch (error) {
+    console.error("AI department assignment error:", error);
+    return null; // Fallback to no assignment
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,16 +62,19 @@ export async function POST(request: NextRequest) {
     const {
       title,
       description,
-      location: locationInput, // human readable address from client
+      location: locationInput,
       category: categoryInput,
       priority: priorityInput,
       attachments,
     } = reqBody;
 
-    // Validate required fields (address will be derived from locationInput)
+    // Validate required fields
     if (!title || !description || !locationInput || !categoryInput) {
       return NextResponse.json(
-        { error: "Missing required fields (title, description, location, category)" },
+        {
+          error:
+            "Missing required fields (title, description, location, category)",
+        },
         { status: 400 }
       );
     }
@@ -43,56 +92,56 @@ export async function POST(request: NextRequest) {
       drainage: "Drainage",
       encroachment: "Encroachment",
       other: "Other",
-      traffic: "Other", // not present in schema, fallback
+      traffic: "Other",
     };
-    const category = categoryMap[(categoryInput || "").toLowerCase()] || "Other";
+    const category =
+      categoryMap[(categoryInput || "").toLowerCase()] || "Other";
 
-    // Normalize priority to match schema enum
-    const priorityMap: Record<string, "low" | "medium" | "high" | "critical"> = {
-      low: "low",
-      medium: "medium",
-      high: "high",
-      urgent: "critical",
-      critical: "critical",
-    };
-    const priority = priorityMap[(priorityInput || "medium").toLowerCase()] || "medium";
+    // Normalize priority
+    const priorityMap: Record<string, "low" | "medium" | "high" | "critical"> =
+      {
+        low: "low",
+        medium: "medium",
+        high: "high",
+        urgent: "critical",
+        critical: "critical",
+      };
+    const priority =
+      priorityMap[(priorityInput || "medium").toLowerCase()] || "medium";
 
-    // Forward geocode the provided address to lat/lon using OpenStreetMap Nominatim
-
-
-  const address = String(locationInput).trim();
-
-  const accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
-
-  const mapboxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
-    address
-  )}.json?access_token=${accessToken}&limit=1`;
+    // Geocode the address
+    const address = String(locationInput).trim();
+    const accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
+    const mapboxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
+      address
+    )}.json?access_token=${accessToken}&limit=1`;
 
     const geoRes = await fetch(mapboxUrl);
+    if (!geoRes.ok) {
+      return NextResponse.json(
+        { error: "Failed to geocode address" },
+        { status: 400 }
+      );
+    }
 
-  if (!geoRes.ok) {
-    return NextResponse.json({ error: "Failed to geocode address" }, { status: 400 });
-  }
-
-  const geoData: { features: Array<{ center: [number, number] }> } = await geoRes.json();
-
+    const geoData: { features: Array<{ center: [number, number] }> } =
+      await geoRes.json();
     if (!geoData.features?.length) {
       return NextResponse.json(
         { error: "Could not find coordinates for the provided address" },
         { status: 400 }
-    );
-  }
+      );
+    }
 
-const [lon, lat] = geoData.features[0].center;
+    const [lon, lat] = geoData.features[0].center;
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return NextResponse.json(
+        { error: "Invalid coordinates received from geocoding service" },
+        { status: 400 }
+      );
+    }
 
-if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-  return NextResponse.json(
-    { error: "Invalid coordinates received from geocoding service" },
-    { status: 400 }
-  );
-}
-
-    // Build media array from attachments if any (optional field)
+    // Build media array
     const media = Array.isArray(attachments)
       ? attachments
           .filter((a: any) => a?.url)
@@ -107,28 +156,90 @@ if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
           })
       : [];
 
-    // Create new issue aligned with schema
+    // ========== AI-POWERED DEPARTMENT ASSIGNMENT ==========
+
+    // Fetch all available departments
+    const departments = await Department.find(
+      {},
+      { name: 1, shortCode: 1, _id: 1 }
+    );
+
+    let assignedDepartment = null;
+    let assignedDepartmentId = null;
+
+    if (departments.length > 0) {
+      // Use AI to determine the best department
+      const deptShortCode = await getDepartmentFromAI(
+        title,
+        description,
+        category,
+        departments.map((d) => ({ name: d.name, shortCode: d.shortCode }))
+      );
+
+      if (deptShortCode) {
+        assignedDepartment = departments.find(
+          (d) => d.shortCode.toUpperCase() === deptShortCode.toUpperCase()
+        );
+        assignedDepartmentId = assignedDepartment?._id;
+      }
+    }
+
+    // Create timeline with assignment if department was found
+    const timeline = [
+      {
+        status: "reported",
+        timestamp: new Date(),
+        by: session.user?.id,
+        notes: "Issue reported by user",
+      },
+    ];
+
+    if (assignedDepartmentId) {
+      timeline.push({
+        status: "assigned",
+        timestamp: new Date(),
+        by: session.user?.id,
+        notes: `Auto-assigned to ${assignedDepartment?.name}`,
+      });
+    }
+
+    // Create new issue with assignment
     const newIssue = new Issue({
       reporterId: session.user?.id,
       title,
       description,
       category,
       priority,
-      status: "reported",
+      status: assignedDepartmentId ? "assigned" : "reported",
       location: { type: "Point", coordinates: [lon, lat] },
       address,
       media,
+      assignedTo: assignedDepartmentId
+        ? {
+            department: assignedDepartmentId,
+            assignedDate: new Date(),
+          }
+        : undefined,
+      timeline,
     });
 
     const savedIssue = await newIssue.save();
 
     return NextResponse.json({
       success: true,
-      message: "Issue reported successfully",
+      message: assignedDepartmentId
+        ? `Issue reported and assigned to ${assignedDepartment?.name}`
+        : "Issue reported successfully",
       issue: {
         id: savedIssue._id,
         title: savedIssue.title,
         status: savedIssue.status,
+        assignedTo: assignedDepartmentId
+          ? {
+              department: assignedDepartment?.name,
+              shortCode: assignedDepartment?.shortCode,
+            }
+          : null,
         createdAt: savedIssue.createdAt,
       },
     });

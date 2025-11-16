@@ -2,7 +2,7 @@ import mongoose, { models, model, Schema } from "mongoose";
 
 export interface IIssue {
   _id?: mongoose.Types.ObjectId;
-  reporterId: mongoose.Types.ObjectId; 
+  reporterId: mongoose.Types.ObjectId;
   title: string;
   description: string;
   category: string;
@@ -18,7 +18,7 @@ export interface IIssue {
   priority: "low" | "medium" | "high" | "critical";
   location: {
     type: "Point";
-    coordinates: [number, number]; 
+    coordinates: [number, number];
   };
   address: string;
   media: Array<{
@@ -27,8 +27,8 @@ export interface IIssue {
     thumbnailUrl?: string;
   }>;
   assignedTo?: {
-    department: mongoose.Types.ObjectId; 
-    staffId?: mongoose.Types.ObjectId; 
+    department: mongoose.Types.ObjectId;
+    staffId?: mongoose.Types.ObjectId;
     assignedDate?: Date;
   };
   resolutionDetails?: {
@@ -48,11 +48,26 @@ export interface IIssue {
     notes?: string;
   }>;
   feedback?: {
-    rating?: number; // 1-5
+    rating?: number;
     comment?: string;
     timestamp?: Date;
   };
   expectedResolutionDate?: Date;
+  socialStats: {
+    likesCount: number;
+    commentsCount: number;
+    repostsCount: number;
+  };
+  visibility: "public" | "followers" | "private";
+  statusReview?: {
+    requestedStatus: string;
+    requestedBy?: mongoose.Types.ObjectId;
+    requestedAt?: Date;
+    reviewedBy?: mongoose.Types.ObjectId;
+    reviewedAt?: Date;
+    reviewStatus?: "pending" | "approved" | "rejected";
+    reviewNotes?: string;
+  };
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -120,7 +135,7 @@ const issueSchema = new Schema<IIssue>(
         required: true,
       },
       coordinates: {
-        type: [Number], 
+        type: [Number],
         required: true,
         index: "2dsphere",
       },
@@ -146,11 +161,11 @@ const issueSchema = new Schema<IIssue>(
         ref: "departments",
         index: true,
       },
-      staffId: { type: Schema.Types.ObjectId, ref: "users" }, 
+      staffId: { type: Schema.Types.ObjectId, ref: "users" },
       assignedDate: Date,
     },
     resolutionDetails: {
-      resolvedBy: { type: Schema.Types.ObjectId, ref: "users" }, 
+      resolvedBy: { type: Schema.Types.ObjectId, ref: "users" },
       resolvedDate: Date,
       resolutionSummary: String,
       resolutionMedia: [
@@ -175,9 +190,51 @@ const issueSchema = new Schema<IIssue>(
       timestamp: Date,
     },
     expectedResolutionDate: Date,
+    // NEW: Social Stats
+    socialStats: {
+      likesCount: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      commentsCount: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      repostsCount: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+    },
+    // NEW: Visibility
+    visibility: {
+      type: String,
+      enum: ["public", "followers", "private"],
+      default: "public",
+    },
+    // Status Review Workflow
+    statusReview: {
+      requestedStatus: String,
+      requestedBy: { type: Schema.Types.ObjectId, ref: "users" },
+      requestedAt: Date,
+      reviewedBy: { type: Schema.Types.ObjectId, ref: "users" },
+      reviewedAt: Date,
+      reviewStatus: {
+        type: String,
+        enum: ["pending", "approved", "rejected"],
+      },
+      reviewNotes: String,
+    },
   },
   { timestamps: true }
 );
+
+// Index for social features queries
+issueSchema.index({ "socialStats.likesCount": -1 });
+issueSchema.index({ "socialStats.commentsCount": -1 });
+issueSchema.index({ visibility: 1, status: 1 });
 
 const Issue = models?.issues || model<IIssue>("issues", issueSchema);
 

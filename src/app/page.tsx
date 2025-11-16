@@ -1,26 +1,17 @@
-"use client";
-
-import React, { useMemo } from "react";
-import HeroSection from "@/components/Home/HeroSection";
-import StatsSection from "@/components/Home/StatsSection";
-import HowItWorksSection from "@/components/Home/HowItWorksSection";
-import CtaSection from "@/components/Home/CtaSection";
 import Header from "@/components/Layouts/Header";
 import Footer from "@/components/Layouts/Footer";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/utils/authOptions";
+import HomeClientPage from "@/components/Home/HomeClientPage";
 // Map section removed for now
 
-export default function HomePage() {
-  // Precompute any values if needed later
-  useMemo(() => null, []);
+export default async function HomePage() {
+  const session = await getServerSession(authOptions);
 
   return (
     <main className="min-h-screen bg-[#F9FAFB] text-gray-700">
       <Header />
-      <HeroSection />
-      <StatsSection />
-      <HowItWorksSection />
-      {/* Map section will be added later */}
-      <CtaSection />
+      <HomeClientPage session={session} />
       <Footer />
     </main>
   );
